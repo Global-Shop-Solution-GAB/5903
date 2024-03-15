@@ -1,0 +1,651 @@
+Program.Sub.ScreenSU.Start
+Gui.Form..Create
+Gui.Form..Caption("Print UDI Label for Serial#s")
+Gui.Form..Size(11295,6900)
+Gui.Form..MinX(0)
+Gui.Form..MinY(0)
+Gui.Form..Position(0,0)
+Gui.Form..BackColor(-2147483633)
+Gui.Form..MaxButton(False)
+Gui.Form..MinButton(False)
+Gui.Form..MousePointer(0)
+Gui.Form..Sizeable(False)
+Gui.Form..Event(UnLoad,Form_UnLoad)
+Gui.Form.txtJOb.Create(TextBox,"",True,1305,300,0,180,180,True,0,"Arial",8,-2147483643,1)
+Gui.Form.txtJOb.Locked(True)
+Gui.Form.cmdBrwsJob.Create(Button)
+Gui.Form.cmdBrwsJob.Size(450,375)
+Gui.Form.cmdBrwsJob.Position(1560,135)
+Gui.Form.cmdBrwsJob.Caption("^")
+Gui.Form.cmdBrwsJob.Event(Click,cmdBrwsJob_Click)
+Gui.Form.GsGridControl1.Create(GsGridControl)
+Gui.Form.GsGridControl1.Size(10620,5085)
+Gui.Form.GsGridControl1.Position(165,585)
+Gui.Form.lblJobDesc.Create(Label,":",True,2625,255,0,2070,255,True,0,"Arial",8,-2147483633,0)
+Gui.Form.cmdPrintSelected.Create(Button)
+Gui.Form.cmdPrintSelected.Size(1320,375)
+Gui.Form.cmdPrintSelected.Position(9540,5835)
+Gui.Form.cmdPrintSelected.Caption("Print Selected")
+Gui.Form.cmdPrintSelected.Event(Click,cmdPrintSelected_Click)
+Gui.Form.cmdGenUDIs.Create(Button)
+Gui.Form.cmdGenUDIs.Size(2010,375)
+Gui.Form.cmdGenUDIs.Position(8760,105)
+Gui.Form.cmdGenUDIs.Caption("Gen UDIs for Selected")
+Gui.Form.cmdGenUDIs.Event(Click,cmdGenUDIs_Click)
+Gui.Form.cmdSelAll.Create(Button)
+Gui.Form.cmdSelAll.Size(2040,375)
+Gui.Form.cmdSelAll.Position(120,5745)
+Gui.Form.cmdSelAll.Caption("Select/Unselect ALL")
+Gui.Form.cmdSelAll.Event(Click,cmdSelAll_Click)
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+v.Global.sJobSuffix.Declare(String)
+v.Global.sLabelName.Declare(STRING,"GCG_5903_SERIAL_UDI.lab")
+Variable.Global.iBIRunID.Declare(Long,-1)
+Variable.Global.iBILogID.Declare(Long,-1)
+Variable.Global.bSentinel.Declare(Boolean,False)
+v.Global.sJob.Declare(String)
+v.Global.sSuffix.Declare(String)
+v.Global.bSelect.Declare(Boolean,True)
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+F.Intrinsic.Control.SetErrorHandler("Main_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+'coded by SFF 3/7/2020
+'this project prints a label for the selected serial#s by Job, 
+'screen loads a list of serial#s after job is selected and they can select all or choose individual (default to all) and print UDI label format with serial# embedded. document covering UDI format is in GAP EW.
+
+f.Intrinsic.Control.CallSub(init)
+gui.Form..Show
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Main_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: Project",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+Function.Intrinsic.Control.EndIf
+
+Program.Sub.Main.End
+
+Program.Sub.cmdBrwsJob_Click.Start
+F.Intrinsic.Control.SetErrorHandler("cmdBrwsJob_Click_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+v.Local.sRet.Declare(String)
+v.Local.sJobSuffix.Declare(String)
+'standard browser for jobs.
+gui.Form..Enabled(false)
+f.Intrinsic.UI.Browser(1000,"",v.Local.sRet)
+f.Intrinsic.Control.If(v.Local.sRet,<>,"***CANCEL***")
+	f.Intrinsic.String.Split(v.Local.sRet,"*!*",v.Local.sRet)
+	f.Intrinsic.String.Build("{0}-{1}",v.Local.sRet(0).trim,v.Local.sRet(1).trim,v.Global.sJobSuffix)
+	v.Global.sJob.Set(v.Local.sRet(0).trim)
+	v.Global.sSuffix.Set(v.Local.sRet(1).trim)
+	gui.Form.txtJOb.Text(v.Global.sJobSuffix)
+	gui.Form.lblJobDesc.Text(v.Local.sRet(3).trim)
+	f.Intrinsic.Control.CallSub(LoadSerialUDI)
+	f.Intrinsic.Control.CallSub(LoadGrid)
+f.Intrinsic.Control.EndIf
+
+gui.Form..Enabled(true)
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("cmdBrwsJob_Click_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: Project",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+Function.Intrinsic.Control.EndIf
+
+Program.Sub.cmdBrwsJob_Click.End
+
+Program.Sub.cmdPrintSelected_Click.Start
+F.Intrinsic.Control.SetErrorHandler("cmdPrintSelected_Click_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+v.Local.sRows.Declare(String)
+v.Local.i.Declare(Long)
+v.Local.iRow.Declare(Long)
+v.Local.iBIRptID.Declare(Long)
+v.Local.sRet.Declare(String)
+v.Local.sSQL.Declare(String)
+
+f.Data.DataTable.Select("Serials","Selected = 1",v.Local.sRows)
+
+f.Intrinsic.Control.If(v.Local.sRows,<>,"***NORETURN***")
+	'now print
+	f.Global.BI.GetIDFromName("GCG_5903_UDI.lab",v.Local.iBIRptID)
+	'get runid
+	f.Global.BI.GetRunID(v.Global.iBIRunID)
+	
+	f.Global.BI.StartLogging(v.Global.iBIRunID,v.Local.iBIRptID,-1,"",v.Global.iBILogID)
+
+	'read row data into datatable fo printing
+	f.Data.DataTable.Create("dtLabel")
+	f.Data.DataTable.AddColumn("dtLabel","WP_JOBSUFFIX","String")
+	f.Data.DataTable.AddColumn("dtLabel","WP_SERIAL","String")
+	f.Data.DataTable.AddColumn("dtLabel","WP_UDI","String")
+	f.Intrinsic.String.Split(v.Local.sRows,"*!*",v.Local.sRows)
+	f.Intrinsic.Control.For(v.Local.i,0,v.DataTable.Serials.RowCount--,1)
+		
+		f.Intrinsic.Control.If(v.DataTable.Serials(v.Local.i).Selected!FieldVal,=,True)
+			f.Data.DataTable.AddRow("dtLabel","WP_JOBSUFFIX",v.Global.sJobSuffix,"WP_SERIAL",v.DataTable.Serials(v.local.i).SERIAL_NUMBER!FieldVal,"WP_UDI",v.DataTable.Serials(v.local.i).UDI_FORMAT!FieldVal)
+		f.Intrinsic.Control.EndIf
+		
+	f.Intrinsic.Control.Next(v.Local.i)
+	
+	'print codesoft from datatable
+	F.Global.BI.PrintCodesoftLabelFromDatatable(V.Global.iBIRunID,V.Global.iBILogID,"dtLabel","",True)	
+	
+f.Intrinsic.Control.EndIf
+
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("cmdPrintSelected_Click_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: Project",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+Function.Intrinsic.Control.EndIf
+Program.Sub.cmdPrintSelected_Click.End
+
+Program.Sub.init.Start
+F.Intrinsic.Control.SetErrorHandler("init_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+'this sub just sets form up. and opens connection
+
+f.ODBC.Connection!con.opencompanyconnection
+
+'just launch browser
+f.Intrinsic.Control.CallSub(cmdBrwsJob_Click)
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("init_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: Project",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+Function.Intrinsic.Control.EndIf
+Program.Sub.init.End
+
+Program.Sub.LoadSerialUDI.Start
+F.Intrinsic.Control.SetErrorHandler("LoadSerialUDI_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+'this sub loads the grid with the serial# as well as two other columns to select and display the UDI Label formula
+v.Local.sSQL.Declare(String)
+v.Local.i.Declare(Long)
+v.Local.sTemp.Declare(String)
+v.Local.sUDI.Declare(String)
+v.Local.iLen.Declare(Long)
+v.Local.sChar.Declare(String)
+v.Local.iSum.Declare(Long)
+v.Local.ia.Declare(Long)
+v.Local.fChkChr.Declare(Float)
+v.Local.iChar.Declare(Long)
+
+f.Intrinsic.Control.If(v.DataTable.Serials.Exists,=,true)
+	f.Data.DataTable.Close("Serials")
+f.Intrinsic.Control.EndIf
+
+'f.Intrinsic.String.Build("Select distinct cast('1'as BIT) as Selected,c.TEXT_INFO1 as PROD_MODEL,a.SERIAL_START as SERIAL_NUMBER,replace(cast(DATE_START as varchar(10)),'-','') as DATE_START,' ' as UDI_FORMAT from v_JOB_SERIAL a join v_JOB_HEADER b on a.job = b.job and a.suffix = b.suffix join v_INVENTORY_MST2 c on b.PART = c.PART and b.LOCATION = c.LOCATION where ltrim(rtrim(a.JOB))+'-'+ltrim(rtrim(a.SUFFIX)) = '{0}';",v.Global.sJobSuffix,v.Local.sSQL)
+
+'changed on 3/11 to pull in existing serial#s to be reprinted if needed. also changed to not allow override of existing UDI. may need to add an admin option to override an error (i.e. didnt mean to generate a UDI, need to change it now)
+f.Intrinsic.String.Build("Select distinct cast('1'as BIT) as Selected,c.TEXT_INFO1 as PROD_MODEL,a.SERIAL_START as SERIAL_NUMBER,replace(cast(DATE_START as varchar(10)),'-','') as DATE_START,d.UDI_FORMAT,d.SN_UDI from v_JOB_SERIAL a join v_JOB_HEADER b on a.job = b.job and a.suffix = b.suffix join v_INVENTORY_MST2 c on b.PART = c.PART and b.LOCATION = c.LOCATION left join GCG_5903_UDI_SERIAL d on a.JOB = d.JOB and a.SUFFIX = d.SUFFIX and a.SERIAL_START = d.SERIAL_NUMBER where ltrim(rtrim(a.JOB))+'-'+ltrim(rtrim(a.SUFFIX)) = '{0}';",v.Global.sJobSuffix,v.Local.sSQL)
+
+f.Data.DataTable.CreateFromSQL("Serials","con",v.Local.sSQL,True)
+
+'auto-assign ID before loading the grid. this was a change added 4/4/2020 by SFF 
+'what this does is it adds an auto-incrementing ID SN_UDI to the project that is an 8 char field and 1 - 99999999, they will manually purge data later, nothing in scope of work to assist with rollover a this time.
+
+
+f.Intrinsic.Control.CallSub(assignSNUDI)
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("LoadSerialUDI_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: Project",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+Function.Intrinsic.Control.EndIf
+Program.Sub.LoadSerialUDI.End
+
+Program.Sub.Form_UnLoad.Start
+f.ODBC.Connection!con.Close
+f.Intrinsic.Control.End
+Program.Sub.Form_UnLoad.End
+
+Program.Sub.LoadGrid.Start
+F.Intrinsic.Control.SetErrorHandler("LoadGrid_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+
+'this sub formats gridview and loads.
+gui.Form.GsGridControl1.AddGridviewFromDatatable("gvSerials","Serials")
+
+gui.Form.GsGridControl1.SetGridviewProperty("gvSerials","ReadOnly",False)
+gui.Form.GsGridControl1.SetGridviewProperty("gvSerials","AllowColumnResizing",True)
+Gui.Form.GsGridControl1.SetGridViewProperty("gvSerials","OptionBehaviorEditable",True)
+Gui.Form.GsGridControl1.SetGridViewProperty("gvSerials","AllowSort",True)
+Gui.Form.GsGridControl1.SetGridViewProperty("gvSerials","AllowFilter",True)
+Gui.Form.GsGridControl1.SetGridViewProperty("gvSerials","OptionsDetailShowDetailTabs",False)
+Gui.Form.GsGridControl1.SetGridViewProperty("gvSerials","OptionsViewShowGroupPanel",True)
+Gui.Form.GsGridControl1.SetGridViewProperty("gvSerials","OptionsViewColumnAutoWidth",False)
+gui.Form.GsGridControl1.BestFitColumns("gvSerials")
+	
+'Select distinct cast('0'as BIT) as Selected,c.TEXT_INFO1 as PROD_MODEL,a.SERIAL_START as SERIAL_NUMBER,replace(cast(DATE_START as varchar(10)),'-','') as DATE_START,' ' as UDI_FORMAT 
+gui.Form.GsGridControl1.SetColumnProperty("gvSerials","Selected","Visible",True)
+Gui.Form.GsGridControl1.SetColumnProperty("gvSerials","Selected","AllowEdit",True)
+Gui.Form.GsGridControl1.SetColumnProperty("gvSerials","Selected","Fixed","Left")
+Gui.Form.GsGridControl1.SetColumnProperty("gvSerials","Selected","MinWidth","25")
+Gui.Form.GsGridControl1.SetColumnProperty("gvSerials","Selected","MaxWidth","25")
+
+gui.Form.GsGridControl1.SetColumnProperty("gvSerials","SERIAL_NUMBER","Visible",True)
+Gui.Form.GsGridControl1.SetColumnProperty("gvSerials","SERIAL_NUMBER","AllowEdit",False)
+gui.Form.GsGridControl1.SetColumnProperty("gvSerials","UDI_FORMAT","Visible",True)
+Gui.Form.GsGridControl1.SetColumnProperty("gvSerials","UDI_FORMAT","AllowEdit",False)
+gui.Form.GsGridControl1.SetColumnProperty("gvSerials","DATE_START","Visible",False)
+Gui.Form.GsGridControl1.SetColumnProperty("gvSerials","DATE_START","AllowEdit",False)
+gui.Form.GsGridControl1.SetColumnProperty("gvSerials","PROD_MODEL","Visible",False)
+Gui.Form.GsGridControl1.SetColumnProperty("gvSerials","PROD_MODEL","AllowEdit",False)
+
+gui.Form.GsGridControl1.MainView("gvSerials")
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("LoadGrid_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: Project",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+Function.Intrinsic.Control.EndIf
+
+
+Program.Sub.LoadGrid.End
+
+Program.Sub.cmdGenUDIs_Click.Start
+F.Intrinsic.Control.SetErrorHandler("Sub_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+v.Local.sSQL.Declare(String)
+v.Local.i.Declare(Long)
+v.Local.sTemp.Declare(String)
+v.Local.sUDI.Declare(String)
+v.Local.iLen.Declare(Long)
+v.Local.sChar.Declare(String)
+v.Local.iSum.Declare(Long)
+v.Local.ia.Declare(Long)
+v.Local.fChkChr.Declare(Float)
+v.Local.iChar.Declare(Long)
+v.Local.sDate.Declare(String)
+v.Local.sRet.Declare(String)
+v.local.sNextSer.Declare(String)
+
+f.Intrinsic.UI.InvokeWaitDialog("Generating UDI#s", "Generating UDI#s")
+'Table of numerical value assignments for computing
+'the HIBC LIC data format Check Character 
+'0 = 0 F = 15 U = 30
+'1 = 1 G = 16 V = 31
+'2 = 2 H = 17 W = 32
+'3 = 3 I = 18 X = 33
+'4 = 4 J = 19 Y = 34
+'5 = 5 K = 20 Z = 35
+'6 = 6 L = 21 - = 36
+'7 = 7 M = 22 . = 37
+'8 = 8 N = 23 Sp = 38
+'9 = 9 O = 24 $ = 39
+'A = 10 P = 25 / = 40
+'B = 11 Q = 26 + = 41
+'C = 12 R = 27 % = 42
+'D = 13 S = 28
+'E = 14 T = 29
+'Note: The character corresponding to 36 is a dash or minus sign (ASCII decimal 45). The character corresponding to
+'37 is a dot or period (ASCII decimal 46). The character corresponding to 38 is a space (ASCII decimal 32).
+
+
+f.Intrinsic.Control.If(v.DataTable.Serials.RowCount--,=,-1)
+	f.Intrinsic.UI.Msgbox("NO Serial #s Listed for This Job, Check Work Order and Trye Again.")
+f.Intrinsic.Control.Else
+	'loop through and set the check character for each one.
+	f.Intrinsic.Control.For(v.Local.i,0,v.DataTable.Serials.RowCount--,1)
+		f.Intrinsic.UI.ChangeWaitStatus("Generating UDI#s",v.Local.i,0,v.DataTable.Serials.RowCount--)
+		f.Intrinsic.Control.If(v.DataTable.Serials(v.Local.i).Selected!FieldValTrim,=,True,"AND",v.DataTable.Serials(v.Local.i).UDI_FORMAT!FieldValTrim,=,"")
+			'logic for inserting check character is based on sum of specific vales (value to sum is based on a table definition) 
+			'see doc provided in GAP EW (page 21 on ANS_HIBC_SLS_2.6_2016.pdf), these rules are hardcoded, they do not change for determining check character so no table needed.
+			
+			f.Intrinsic.String.Build("+B547{0}0/$$+7{1}/16D{2}",v.DataTable.Serials(v.Local.i).PROD_MODEL!FieldValTrim,v.DataTable.Serials(v.Local.i).SN_UDI!FieldValTrim,v.Ambient.Date.FormatYYYYMMDD,v.Local.sTemp)
+			
+			'test, check character should be X
+	'		v.Local.sTemp.Set("+B547RF14100/$$+700000001/16DYYYYMMDD")
+	
+	
+			f.Intrinsic.String.Len(v.Local.sTemp,v.Local.iLen)
+			
+			f.Intrinsic.Control.For(v.Local.ia,1,v.Local.iLen,1)
+			
+				f.Intrinsic.String.Mid(v.Local.sTemp,v.Local.ia,1,v.Local.sChar)
+				
+				f.Intrinsic.Control.SelectCase(v.Local.sChar)
+					f.Intrinsic.Control.Case("0")
+						f.Intrinsic.Math.Add(v.Local.iSum,0,v.Local.iSum)
+					f.Intrinsic.Control.Case("1")
+						f.Intrinsic.Math.Add(v.Local.iSum,1,v.Local.iSum)
+					f.Intrinsic.Control.Case("2")
+						f.Intrinsic.Math.Add(v.Local.iSum,2,v.Local.iSum)
+					f.Intrinsic.Control.Case("3")
+						f.Intrinsic.Math.Add(v.Local.iSum,3,v.Local.iSum)
+					f.Intrinsic.Control.case("4")
+						f.Intrinsic.Math.Add(v.Local.iSum,4,v.Local.iSum)
+					f.Intrinsic.Control.case("5")
+						f.Intrinsic.Math.Add(v.Local.iSum,5,v.Local.iSum)
+					f.Intrinsic.Control.case("6")
+						f.Intrinsic.Math.Add(v.Local.iSum,6,v.Local.iSum)
+					f.Intrinsic.Control.case("7")
+						f.Intrinsic.Math.Add(v.Local.iSum,7,v.Local.iSum)
+					f.Intrinsic.Control.case("8")
+						f.Intrinsic.Math.Add(v.Local.iSum,8,v.Local.iSum)
+					f.Intrinsic.Control.case("9")
+						f.Intrinsic.Math.Add(v.Local.iSum,9,v.Local.iSum)
+					f.Intrinsic.Control.case("A")
+						f.Intrinsic.Math.Add(v.Local.iSum,10,v.Local.iSum)
+					f.Intrinsic.Control.case("B")
+						f.Intrinsic.Math.Add(v.Local.iSum,11,v.Local.iSum)
+					f.Intrinsic.Control.case("C")
+						f.Intrinsic.Math.Add(v.Local.iSum,12,v.Local.iSum)
+					f.Intrinsic.Control.case("D")
+						f.Intrinsic.Math.Add(v.Local.iSum,13,v.Local.iSum)
+					f.Intrinsic.Control.case("E")
+						f.Intrinsic.Math.Add(v.Local.iSum,14,v.Local.iSum)
+					f.Intrinsic.Control.case("F")
+						f.Intrinsic.Math.Add(v.Local.iSum,15,v.Local.iSum)
+					f.Intrinsic.Control.case("G")
+						f.Intrinsic.Math.Add(v.Local.iSum,16,v.Local.iSum)
+					f.Intrinsic.Control.case("H")
+						f.Intrinsic.Math.Add(v.Local.iSum,17,v.Local.iSum)
+					f.Intrinsic.Control.case("I")
+						f.Intrinsic.Math.Add(v.Local.iSum,18,v.Local.iSum)
+					f.Intrinsic.Control.case("J")
+						f.Intrinsic.Math.Add(v.Local.iSum,19,v.Local.iSum)
+					f.Intrinsic.Control.case("K")
+						f.Intrinsic.Math.Add(v.Local.iSum,20,v.Local.iSum)
+					f.Intrinsic.Control.case("L")
+						f.Intrinsic.Math.Add(v.Local.iSum,21,v.Local.iSum)
+					f.Intrinsic.Control.case("M")
+						f.Intrinsic.Math.Add(v.Local.iSum,22,v.Local.iSum)
+					f.Intrinsic.Control.case("N")
+						f.Intrinsic.Math.Add(v.Local.iSum,23,v.Local.iSum)
+					f.Intrinsic.Control.case("O")
+						f.Intrinsic.Math.Add(v.Local.iSum,24,v.Local.iSum)
+					f.Intrinsic.Control.case("P")
+						f.Intrinsic.Math.Add(v.Local.iSum,25,v.Local.iSum)
+					f.Intrinsic.Control.case("Q")
+						f.Intrinsic.Math.Add(v.Local.iSum,26,v.Local.iSum)
+					f.Intrinsic.Control.case("R")
+						f.Intrinsic.Math.Add(v.Local.iSum,27,v.Local.iSum)
+					f.Intrinsic.Control.case("S")
+						f.Intrinsic.Math.Add(v.Local.iSum,28,v.Local.iSum)
+					f.Intrinsic.Control.case("T")
+						f.Intrinsic.Math.Add(v.Local.iSum,29,v.Local.iSum)
+					f.Intrinsic.Control.case("U")
+						f.Intrinsic.Math.Add(v.Local.iSum,30,v.Local.iSum)
+					f.Intrinsic.Control.case("V")
+						f.Intrinsic.Math.Add(v.Local.iSum,31,v.Local.iSum)
+					f.Intrinsic.Control.case("W")
+						f.Intrinsic.Math.Add(v.Local.iSum,32,v.Local.iSum)
+					f.Intrinsic.Control.case("X")
+						f.Intrinsic.Math.Add(v.Local.iSum,33,v.Local.iSum)
+					f.Intrinsic.Control.case("Y")
+						f.Intrinsic.Math.Add(v.Local.iSum,34,v.Local.iSum)
+					f.Intrinsic.Control.case("Z")
+						f.Intrinsic.Math.Add(v.Local.iSum,35,v.Local.iSum)
+					f.Intrinsic.Control.case("-")
+						f.Intrinsic.Math.Add(v.Local.iSum,36,v.Local.iSum)
+					f.Intrinsic.Control.case(".")
+						f.Intrinsic.Math.Add(v.Local.iSum,37,v.Local.iSum)
+					f.Intrinsic.Control.case(" ")
+						f.Intrinsic.Math.Add(v.Local.iSum,38,v.Local.iSum)
+					f.Intrinsic.Control.case("$")
+						f.Intrinsic.Math.Add(v.Local.iSum,39,v.Local.iSum)
+					f.Intrinsic.Control.case("/")
+						f.Intrinsic.Math.Add(v.Local.iSum,40,v.Local.iSum)
+					f.Intrinsic.Control.case("+")
+						f.Intrinsic.Math.Add(v.Local.iSum,41,v.Local.iSum)
+					f.Intrinsic.Control.case("%")
+						f.Intrinsic.Math.Add(v.Local.iSum,42,v.Local.iSum)
+					f.Intrinsic.Control.CaseElse
+						f.Intrinsic.Math.Add(v.Local.iSum,0,v.Local.iSum)
+						
+				f.Intrinsic.Control.EndSelect
+				
+			f.Intrinsic.Control.Next(v.Local.ia)
+			'modulus 43 calc.
+			f.Intrinsic.Math.Div(v.Local.iSum,43,v.Local.fChkChr)
+			f.Intrinsic.String.Split(v.Local.fChkChr.String,".",v.Local.sChar)
+			f.Intrinsic.Math.Mult(v.Local.sChar.Long,43,v.Local.fChkChr)
+			f.Intrinsic.Math.Sub(v.Local.iSum,v.Local.fChkChr,v.Local.iChar)
+			
+			'check the result of modulus 43 against this case to get Check Character that goes at the end of the string/barcode 
+			f.Intrinsic.Control.SelectCase(v.Local.iChar.String)
+				f.Intrinsic.Control.Case("0")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"0",v.Local.sTemp)
+				f.Intrinsic.Control.Case("1")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"1",v.Local.sTemp)
+				f.Intrinsic.Control.Case("2")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"2",v.Local.sTemp)
+				f.Intrinsic.Control.Case("3")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"3",v.Local.sTemp)
+				f.Intrinsic.Control.Case("4")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"4",v.Local.sTemp)
+				f.Intrinsic.Control.Case("5")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"5",v.Local.sTemp)
+				f.Intrinsic.Control.Case("6")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"6",v.Local.sTemp)
+				f.Intrinsic.Control.Case("7")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"7",v.Local.sTemp)
+				f.Intrinsic.Control.Case("8")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"8",v.Local.sTemp)
+				f.Intrinsic.Control.Case("9")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"9",v.Local.sTemp)
+				f.Intrinsic.Control.Case("10")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"A",v.Local.sTemp)
+				f.Intrinsic.Control.Case("11")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"B",v.Local.sTemp)
+				f.Intrinsic.Control.Case("12")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"C",v.Local.sTemp)
+				f.Intrinsic.Control.Case("13")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"D",v.Local.sTemp)
+				f.Intrinsic.Control.Case("14")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"E",v.Local.sTemp)
+				f.Intrinsic.Control.Case("15")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"F",v.Local.sTemp)
+				f.Intrinsic.Control.Case("16")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"G",v.Local.sTemp)
+				f.Intrinsic.Control.Case("17")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"H",v.Local.sTemp)
+				f.Intrinsic.Control.Case("18")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"I",v.Local.sTemp)
+				f.Intrinsic.Control.Case("19")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"J",v.Local.sTemp)
+				f.Intrinsic.Control.Case("20")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"K",v.Local.sTemp)
+				f.Intrinsic.Control.Case("21")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"L",v.Local.sTemp)
+				f.Intrinsic.Control.Case("22")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"M",v.Local.sTemp)
+				f.Intrinsic.Control.Case("23")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"N",v.Local.sTemp)
+				f.Intrinsic.Control.Case("24")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"O",v.Local.sTemp)
+				f.Intrinsic.Control.Case("25")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"P",v.Local.sTemp)
+				f.Intrinsic.Control.Case("26")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"Q",v.Local.sTemp)
+				f.Intrinsic.Control.Case("27")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"R",v.Local.sTemp)
+				f.Intrinsic.Control.Case("28")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"S",v.Local.sTemp)
+				f.Intrinsic.Control.Case("29")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"T",v.Local.sTemp)
+				f.Intrinsic.Control.Case("30")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"U",v.Local.sTemp)
+				f.Intrinsic.Control.Case("31")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"V",v.Local.sTemp)
+				f.Intrinsic.Control.Case("32")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"W",v.Local.sTemp)
+				f.Intrinsic.Control.Case("33")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"X",v.Local.sTemp)
+				f.Intrinsic.Control.Case("34")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"Y",v.Local.sTemp)
+				f.Intrinsic.Control.Case("35")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"Z",v.Local.sTemp)
+				f.Intrinsic.Control.Case("36")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"-",v.Local.sTemp)
+				f.Intrinsic.Control.Case("37")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,".",v.Local.sTemp)
+				f.Intrinsic.Control.Case("38")
+					'get next serial# avaialble because their machines cannot have a % check character. 
+					f.ODBC.Connection!con.executeandreturn("select top 1 cast(sn_udi as int)+1 from GCG_5903_UDI_SERIAL order by SN_UDI desc",v.Local.sNextSer)
+					f.Intrinsic.Control.If(v.Local.sTemp,<>,"***NORETURN***")
+						f.Intrinsic.String.LPad(v.Local.sNextSer,"0",8,v.Local.sNextSer)
+					f.Intrinsic.Control.Else
+						v.Local.sSNUDI.Set("00000001")
+					f.Intrinsic.Control.EndIf
+					f.Intrinsic.String.Build("Update GCG_5903_UDI_SERIAL set SN_UDI = '{0}' where SN_UDI = '{1}'",v.Local.sNextSer,v.DataTable.Serials(v.local.i).SN_UDI!FieldVal,v.Local.sSQL)
+					f.ODBC.Connection!con.execute(v.Local.sSQL)
+					f.Data.DataTable.SetValue("Serials",v.Local.i,"SN_UDI",v.Local.sNextSer)
+					'subtract and reloop through same index to regen and check UDI.
+					f.Intrinsic.Math.Sub(v.Local.i,1,v.Local.i)
+					f.Intrinsic.Control.Next(v.Local.i)
+			
+			
+				f.Intrinsic.Control.Case("39")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"$",v.Local.sTemp)
+				f.Intrinsic.Control.Case("40")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"/",v.Local.sTemp)
+				f.Intrinsic.Control.Case("41")
+					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"+",v.Local.sTemp)
+				f.Intrinsic.Control.Case("42")
+					
+					'get next serial# avaialble because their machines cannot have a % check character. 
+					f.ODBC.Connection!con.executeandreturn("select top 1 cast(sn_udi as int)+1 from GCG_5903_UDI_SERIAL order by SN_UDI desc",v.Local.sNextSer)
+					f.Intrinsic.Control.If(v.Local.sTemp,<>,"***NORETURN***")
+						f.Intrinsic.String.LPad(v.Local.sNextSer,"0",8,v.Local.sNextSer)
+					f.Intrinsic.Control.Else
+						v.Local.sSNUDI.Set("00000001")
+					f.Intrinsic.Control.EndIf
+					f.Intrinsic.String.Build("Update GCG_5903_UDI_SERIAL set SN_UDI = '{0}' where SN_UDI = '{1}'",v.Local.sNextSer,v.DataTable.Serials(v.local.i).SN_UDI!FieldVal,v.Local.sSQL)
+					f.ODBC.Connection!con.execute(v.Local.sSQL)
+					f.Data.DataTable.SetValue("Serials",v.Local.i,"SN_UDI",v.Local.sNextSer)
+					'subtract and reloop through same index to regen and check UDI.
+					f.Intrinsic.Math.Sub(v.Local.i,1,v.Local.i)
+					f.Intrinsic.Control.Next(v.Local.i)
+					
+'					f.Intrinsic.String.Build("{0}{1}",v.Local.sTemp,"%",v.Local.sTemp)
+			f.Intrinsic.Control.EndSelect
+			
+			'set the check character
+			f.Data.DataTable.SetValue("Serials",v.Local.i,"UDI_FORMAT",v.Local.sTemp)
+
+
+		
+		f.Intrinsic.Control.EndIf		
+		
+		'generate record for xreference they need for printing on-demand. 
+		f.Intrinsic.String.Build("Select * from GCG_5903_UDI_SERIAL where SERIAL_NUMBER = '{0}'",v.DataTable.Serials(v.local.i).SERIAL_NUMBER!FieldVal,v.Local.sSQL)
+		f.ODBC.Connection!con.executeandreturn(v.Local.sSQL,v.Local.sRet)
+		f.Intrinsic.Control.If(v.Local.sRet,=,"")
+			f.Intrinsic.String.Build("Insert into GCG_5903_UDI_SERIAL values ('{0}','{1}','{2}','{3}','{4}')",v.Global.sJob,v.Global.sSuffix,v.DataTable.Serials(v.local.i).SERIAL_NUMBER!FieldVal,v.DataTable.Serials(v.local.i).UDI_FORMAT!FieldVal,v.DataTable.Serials(v.local.i).SN_UDI!FieldVal,v.Local.sSQL)
+			f.ODBC.Connection!con.execute(v.Local.sSQL)
+		f.Intrinsic.Control.Else
+			'update existing
+			f.Intrinsic.String.Build("Update GCG_5903_UDI_SERIAL set JOB = '{0}', SUFFIX = '{1}', SERIAL_NUMBER = '{2}', UDI_FORMAT = '{3}' where SERIAL_NUMBER = '{2}'",v.Global.sJob,v.Global.sSuffix,v.DataTable.Serials(v.local.i).SERIAL_NUMBER!FieldVal,v.DataTable.Serials(v.local.i).UDI_FORMAT!FieldVal,v.Local.sSQL)
+			f.ODBC.Connection!con.execute(v.Local.sSQL)
+		f.Intrinsic.Control.EndIf
+		
+	f.Intrinsic.Control.Next(v.Local.i)
+f.Intrinsic.Control.EndIf
+f.Intrinsic.UI.CloseWaitDialog
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Sub_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: Project",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+Function.Intrinsic.Control.EndIf
+
+
+
+Program.Sub.cmdGenUDIs_Click.End
+
+Program.Sub.cmdSelAll_Click.Start
+F.Intrinsic.Control.SetErrorHandler("cmdSelAll_Click_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+f.Intrinsic.Control.If(v.Global.bSelect,=,True)
+	v.Global.bSelect.Set(false)
+	f.Data.DataTable.SetValue("Serials",-1,"SELECTED",False)
+	
+f.Intrinsic.Control.Else
+	v.Global.bSelect.Set(True)
+	f.Data.DataTable.SetValue("Serials",-1,"SELECTED",True)
+f.Intrinsic.Control.EndIf
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("cmdSelAll_Click_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: Project",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+Function.Intrinsic.Control.EndIf
+
+Program.Sub.cmdSelAll_Click.End
+
+Program.Sub.assignSNUDI.Start
+F.Intrinsic.Control.SetErrorHandler("assignSNUDI_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+v.Local.sSQL.Declare(String)
+v.Local.i.Declare(Long)
+v.Local.sTemp.Declare(String)
+v.Local.sSNUDI.Declare(String)
+v.Local.iTemp.Declare(Long)
+
+f.Data.DataTable.Select("Serials","SN_UDI is NULL",v.Local.sSQL)
+f.Intrinsic.Control.If(v.Local.sSQL,<>,"***NORETURN***")
+	f.Intrinsic.Control.For(v.Local.i,0,v.DataTable.Serials.RowCount--,1)
+		f.ODBC.Connection!con.executeandreturn("select top 1 cast(sn_udi as int) from GCG_5903_UDI_SERIAL order by cast(SN_UDI as int) desc",v.Local.sTemp)
+		f.Intrinsic.Control.If(v.Local.sTemp,<>,"***NORETURN***")
+			f.Intrinsic.Math.Add(v.Local.sTemp.Long,1,v.Local.iTemp)
+			v.Local.sTemp.Set(v.Local.iTemp)
+			f.Intrinsic.String.LPad(v.Local.sTemp,"0",8,v.Local.sSNUDI)
+		f.Intrinsic.Control.Else
+			v.Local.sSNUDI.Set("00000001")
+		f.Intrinsic.Control.EndIf
+		
+		f.Data.DataTable.SetValue("Serials",v.Local.i,"SN_UDI",v.Local.sSNUDI)
+		
+		f.Intrinsic.String.Build("Insert into GCG_5903_UDI_SERIAL values ('{0}','{1}','{2}','{3}','{4}')",v.Global.sJob,v.Global.sSuffix,v.DataTable.Serials(v.local.i).SERIAL_NUMBER!FieldVal,v.DataTable.Serials(v.local.i).UDI_FORMAT!FieldVal,v.DataTable.Serials(v.local.i).SN_UDI!FieldVal,v.Local.sSQL)
+		f.ODBC.Connection!con.execute(v.Local.sSQL)		
+
+	f.Intrinsic.Control.Next(v.Local.i)
+f.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("assignSNUDI_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: Project",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+Function.Intrinsic.Control.EndIf
+Program.Sub.assignSNUDI.End
